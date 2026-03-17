@@ -72,7 +72,11 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ------------------ CONFIG ------------------
-client = Groq(api_key="YOUR_GROQ_KEY")
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("API key missing. Please add in Streamlit Secrets.")
+    st.stop()
+
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 st.set_page_config(
     page_title="Sri AI",
