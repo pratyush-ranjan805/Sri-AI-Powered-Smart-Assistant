@@ -3,36 +3,6 @@ from groq import Groq
 import time
 from PyPDF2 import PdfReader
 import sqlite3
-import hashlib
-import random
-import requests
-
-# ------------------ HASH FUNCTION ------------------
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-# ------------------ BREVO EMAIL FUNCTION ------------------
-def send_otp_email(receiver_email, otp):
-    url = "https://api.brevo.com/v3/smtp/email"
-
-    headers = {
-        "accept": "application/json",
-        "api-key": st.secrets["BREVO_API_KEY"],
-        "content-type": "application/json"
-    }
-
-    data = {
-        "sender": {"email": st.secrets["SENDER_EMAIL"]},
-        "to": [{"email": receiver_email}],
-        "subject": "Sri AI - OTP Verification",
-        "htmlContent": f"<h3>Your OTP is: {otp}</h3>"
-    }
-
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        return response.status_code == 201
-    except:
-        return False
 
 # ------------------ DATABASE ------------------
 conn = sqlite3.connect("sri_app.db", check_same_thread=False)
@@ -65,9 +35,6 @@ if "username" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "otp" not in st.session_state:
-    st.session_state.otp = None
-
 # ------------------ LOGIN ------------------
 if not st.session_state.logged_in:
     st.title("🔐 Sri AI Login")
@@ -75,43 +42,18 @@ if not st.session_state.logged_in:
     menu = ["Login", "Signup"]
     choice = st.selectbox("Select Option", menu)
 
-    username = st.text_input("Email")
+    username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
-    # -------- SIGNUP WITH OTP --------
     if choice == "Signup":
-        if st.button("Send OTP"):
-            cursor.execute("SELECT * FROM users WHERE username=?", (username,))
-            if cursor.fetchone():
-                st.error("User already exists")
-            else:
-                otp = str(random.randint(100000, 999999))
-                if send_otp_email(username, otp):
-                    st.session_state.otp = otp
-                    st.session_state.temp_user = username
-                    st.session_state.temp_pass = hash_password(password)
-                    st.success("OTP sent to your email")
-                else:
-                    st.error("Failed to send OTP")
+        if st.button("Create Account"):
+            cursor.execute("INSERT INTO users VALUES (?, ?)", (username, password))
+            conn.commit()
+            st.success("Account created! Please login.")
 
-        if st.session_state.otp:
-            entered_otp = st.text_input("Enter OTP")
-
-            if st.button("Verify OTP"):
-                if entered_otp == st.session_state.otp:
-                    cursor.execute("INSERT INTO users VALUES (?, ?)",
-                                   (st.session_state.temp_user, st.session_state.temp_pass))
-                    conn.commit()
-                    st.success("Account created successfully!")
-                    st.session_state.otp = None
-                else:
-                    st.error("Invalid OTP")
-
-    # -------- LOGIN --------
     if choice == "Login":
         if st.button("Login"):
-            hashed_password = hash_password(password)
-            cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, hashed_password))
+            cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
             data = cursor.fetchone()
 
             if data:
@@ -131,12 +73,16 @@ if not st.session_state.logged_in:
 
 # ------------------ CONFIG ------------------
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("API key missing")
+    st.error("API key missing. Please add in Streamlit Secrets.")
     st.stop()
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-st.set_page_config(page_title="Sri AI", page_icon="🤖", layout="wide")
+st.set_page_config(
+    page_title="Sri AI",
+    page_icon="🤖",
+    layout="wide"
+)
 
 # ------------------ SAME UI ------------------
 st.markdown("""
@@ -176,7 +122,7 @@ with st.sidebar:
     st.write("✔ Smart AI Chat")
     st.write("✔ PDF Chat")
     st.write("✔ Memory")
-    st.write("✔ Secure Login + OTP")
+    st.write("✔ Login System")
 
     st.markdown("---")
 
@@ -254,10 +200,3 @@ Question: {user_input}
                    (st.session_state.username, "assistant", reply))
     conn.commit()
 
-# ------------------ FOOTER ------------------
-st.markdown("""
-<hr style="border: 1px solid #444; margin-top: 40px;">
-<p style='text-align: center; color: gray; font-size: 14px;'>
-🚀 Built by <b>Pratyush & Saloni</b>
-</p>
-""", unsafe_allow_html=True)
